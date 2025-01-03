@@ -29,7 +29,7 @@ A lightweight, customizable system information fetcher written in Python.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/hyperfetch.git
+git clone https://github.com/NurOS-linux/HyperFetch.git
 cd hyperfetch
 ```
 
@@ -116,7 +116,6 @@ This project is licensed under the GNU/GPL 3.0 license - see the [LICENSE](LICEN
 
 ## Acknowledgments
 
-- Thanks to [Neofetch](https://github.com/dylanaraps/neofetch) for inspiration
 - All contributors and users of HyperFetch
 
 ## Support
