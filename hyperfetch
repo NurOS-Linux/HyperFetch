@@ -8,6 +8,9 @@ import socket
 import requests
 from colorama import Fore, Style, init
 import importlib.util
+import subprocess
+from datetime import datetime
+import pytz
 
 # Инициализация colorama
 init()
@@ -22,7 +25,13 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, 'config.conf')
 LOGOS_DIR = os.path.join(CONFIG_DIR, 'logos')
 MODULES_DIR = os.path.join(CONFIG_DIR, 'modules')
 
+def get_current_datetime():
+    """Получение текущей даты и времени в UTC"""
+    utc_now = datetime.now(pytz.UTC)
+    return utc_now.strftime('%Y-%m-%d %H:%M:%S')
+
 def get_os_info():
+    """Получение информации об операционной системе"""
     system = platform.system()
     if system == 'Linux':
         try:
@@ -35,9 +44,11 @@ def get_os_info():
     return system
 
 def get_kernel_version():
+    """Получение версии ядра"""
     return platform.uname().release
 
 def get_user_info():
+    """Получение информации о пользователе и хосте"""
     try:
         return os.getlogin(), platform.node()
     except OSError:
@@ -45,12 +56,14 @@ def get_user_info():
         return pwd.getpwuid(os.getuid())[0], platform.node()
 
 def get_memory_info():
+    """Получение информации о памяти"""
     mem = psutil.virtual_memory()
     total = mem.total / (1024 ** 3)  # Convert bytes to GB
     available = mem.available / (1024 ** 3)
     return total, available
 
 def get_ip_addresses():
+    """Получение IP адресов"""
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     public_ip = None
@@ -61,6 +74,7 @@ def get_ip_addresses():
     return local_ip, public_ip
 
 def get_unix_info():
+    """Получение информации о Unix-системе"""
     init_system = None
     de = os.environ.get('XDG_CURRENT_DESKTOP', None)
     terminal = os.environ.get('TERM_PROGRAM', os.environ.get('TERM', None))
@@ -73,18 +87,53 @@ def get_unix_info():
     return init_system, de, terminal
 
 def get_cpu_info():
-    cpu_info = psutil.cpu_info().brand_raw if hasattr(psutil, 'cpu_info') else platform.processor()
+    """Получение информации о процессоре"""
+    if platform.system() == 'Linux':
+        try:
+            # Пробуем использовать lscpu
+            result = subprocess.run(['lscpu'], capture_output=True, text=True)
+            if result.returncode == 0:
+                lscpu_output = result.stdout
+                # Ищем модель процессора
+                for line in lscpu_output.split('\n'):
+                    if 'Model name:' in line:
+                        return line.split(':')[1].strip()
+                    
+            # Если lscpu не сработал, читаем из /proc/cpuinfo
+            try:
+                with open('/proc/cpuinfo', 'r') as file:
+                    for line in file:
+                        if 'model name' in line:
+                            return line.split(':')[1].strip()
+            except FileNotFoundError:
+                pass
+                
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+    
+    # Fallback для других ОС или если методы выше не сработали
+    try:
+        freq = psutil.cpu_freq()
+        count = psutil.cpu_count(logical=False)
+        if freq and count:
+            return f"{count} cores @ {freq.current:.2f} MHz"
+    except Exception:
+        pass
+    
+    # Если ничего не сработало, используем platform.processor()
+    cpu_info = platform.processor()
     if not cpu_info:
         cpu_info = "Unknown Processor"
     return cpu_info
 
 def load_config():
+    """Загрузка конфигурации"""
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
     return config
 
 def get_logo(config):
-    # Получение логотипа из конфигурационного файла
+    """Получение ASCII-логотипа"""
     logo_file = config.get('HyperFetch', 'logo', fallback=None)
     if logo_file:
         logo_path = os.path.join(LOGOS_DIR, logo_file)
@@ -101,6 +150,7 @@ def get_logo(config):
     return logo
 
 def load_modules():
+    """Загрузка модулей"""
     modules = []
     if os.path.exists(MODULES_DIR):
         for filename in os.listdir(MODULES_DIR):
@@ -117,6 +167,7 @@ def load_modules():
     return modules
 
 def print_hyperfetch_info():
+    """Вывод информации о системе"""
     config = load_config()
     os_name = get_os_info()
     kernel_version = get_kernel_version()
@@ -124,17 +175,21 @@ def print_hyperfetch_info():
     total_memory, available_memory = get_memory_info()
     local_ip, public_ip = get_ip_addresses()
     cpu_info = get_cpu_info()
+    current_datetime = get_current_datetime()
 
     show_memory = config.getboolean('HyperFetch', 'show_memory', fallback=True)
     show_kernel = config.getboolean('HyperFetch', 'show_kernel', fallback=True)
     show_ip = config.getboolean('HyperFetch', 'show_ip', fallback=True)
     show_unix_info = config.getboolean('HyperFetch', 'show_unix_info', fallback=True)
     show_cpu = config.getboolean('HyperFetch', 'show_cpu', fallback=True)
+    show_datetime = config.getboolean('HyperFetch', 'show_datetime', fallback=True)
     
     logo = get_logo(config)
     modules = load_modules()
     
     print(Fore.CYAN + logo + Style.RESET_ALL)
+    if show_datetime:
+        print(f"{Fore.GREEN}DateTime (UTC):{Style.RESET_ALL} {current_datetime}")
     print(f"{Fore.GREEN}OS:{Style.RESET_ALL} {os_name}")
     if show_kernel and (platform.system().lower() in ['linux', 'darwin', 'freebsd']):
         print(f"{Fore.GREEN}Kernel:{Style.RESET_ALL} {kernel_version}")
@@ -164,5 +219,9 @@ def print_hyperfetch_info():
             except Exception as e:
                 print(f"Error running module {module.__name__}: {e}")
 
-if __name__ == "__main__":
+def main():
+    """Основная функция"""
     print_hyperfetch_info()
+
+if __name__ == "__main__":
+    main()
